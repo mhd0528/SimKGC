@@ -12,7 +12,7 @@ from doc import load_data, Example
 from predict import BertPredictor
 from dict_hub import get_entity_dict, get_all_triplet_dict
 from triplet import EntityDict
-from rerank import rerank_by_graph
+from rerank import rerank_by_graph, rerank_by_path
 from logger_config import logger
 
 
@@ -42,6 +42,7 @@ class PredInfo:
 @torch.no_grad()
 def compute_metrics(hr_tensor: torch.tensor,
                     entities_tensor: torch.tensor,
+                    train_hr_tensor: torch.tensor,  ## add by mhd
                     target: List[int],
                     examples: List[Example],
                     k=3, batch_size=256) -> Tuple:
@@ -59,13 +60,17 @@ def compute_metrics(hr_tensor: torch.tensor,
         end = start + batch_size
         # batch_size * entity_cnt
         batch_score = torch.mm(hr_tensor[start:end, :], entities_tensor.t())
+        # print('1111111', hr_tensor[start:end, :].size(), entities_tensor.size())
         assert entity_cnt == batch_score.size(1)
         batch_target = target[start:end]
 
         # re-ranking based on topological structure
         rerank_by_graph(batch_score, examples[start:end], entity_dict=entity_dict)
+        rerank_by_path(batch_score, examples[start:end], entity_dict, train_hr_tensor, entities_tensor)
 
         # filter known triplets
+        # print("batch_score_size: {}".format(batch_score.size()))
+        # print("batch_size: {}".format(batch_size))
         for idx in range(batch_score.size(0)):
             mask_indices = []
             cur_ex = examples[start + idx]
@@ -140,9 +145,16 @@ def eval_single_direction(predictor: BertPredictor,
     hr_tensor, _ = predictor.predict_by_examples(examples)
     hr_tensor = hr_tensor.to(entity_tensor.device)
     target = [entity_dict.entity_to_idx(ex.tail_id) for ex in examples]
+
+    ## add by mhd
+    ## need hr vector for training data as well
+    train_examples = load_data(args.train_path, add_forward_triplet=True, add_backward_triplet=True)
+    train_hr_tensor, _ = predictor.predict_by_examples(train_examples)
+    train_hr_tensor = train_hr_tensor.to(entity_tensor.device)
+
     logger.info('predict tensor done, compute metrics...')
 
-    topk_scores, topk_indices, metrics, ranks = compute_metrics(hr_tensor=hr_tensor, entities_tensor=entity_tensor,
+    topk_scores, topk_indices, metrics, ranks = compute_metrics(hr_tensor=hr_tensor, entities_tensor=entity_tensor, train_hr_tensor=train_hr_tensor, # add by mhd
                                                                 target=target, examples=examples,
                                                                 batch_size=batch_size)
     eval_dir = 'forward' if eval_forward else 'backward'

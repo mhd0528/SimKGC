@@ -1,0 +1,38 @@
++ set -e
++ model_path=bert
++ task=WN18RR
++ [[ 2 -ge 1 ]]
++ [[ ! ./checkpoint/wn18rr/model_last.mdl == \-\-* ]]
++ model_path=./checkpoint/wn18rr/model_last.mdl
++ shift
++ [[ 1 -ge 1 ]]
++ [[ ! WN18RR == \-\-* ]]
++ task=WN18RR
++ shift
++++ dirname scripts/eval.sh
+++ cd scripts
+++ cd ..
+++ pwd
++ DIR=/home/SimKGC
++ echo 'working directory: /home/SimKGC'
+working directory: /home/SimKGC
++ '[' -z '' ']'
++ DATA_DIR=/home/SimKGC/data/WN18RR
++ test_path=/home/SimKGC/data/WN18RR/test.txt.json
++ [[ 0 -ge 1 ]]
++ neighbor_weight=0.05
++ rerank_n_hop=2
++ '[' WN18RR = WN18RR ']'
++ rerank_n_hop=5
++ '[' WN18RR = wiki5m_ind ']'
++ python3 -u evaluate.py --task WN18RR --is-test --eval-model-path ./checkpoint/wn18rr/model_last.mdl --neighbor-weight 0.05 --rerank-n-hop 5 --train-path /home/SimKGC/data/WN18RR/train.txt.json --valid-path /home/SimKGC/data/WN18RR/test.txt.json
+Traceback (most recent call last):
+  File "evaluate.py", line 11, in <module>
+    from doc import load_data, Example
+  File "/home/SimKGC/doc.py", line 10, in <module>
+    from triplet_mask import construct_mask, construct_self_negative_mask
+  File "/home/SimKGC/triplet_mask.py", line 6, in <module>
+    from dict_hub import get_train_triplet_dict, get_entity_dict, EntityDict, TripletDict
+  File "/home/SimKGC/dict_hub.py", line 4, in <module>
+    from transformers import AutoTokenizer
+ModuleNotFoundError: No module named 'transformers'

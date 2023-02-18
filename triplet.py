@@ -3,7 +3,7 @@ import json
 
 from typing import List
 from dataclasses import dataclass
-from collections import deque
+from collections import deque, defaultdict
 
 from logger_config import logger
 
@@ -33,6 +33,7 @@ class TripletDict:
         examples += [reverse_triplet(obj) for obj in examples]
         for ex in examples:
             self.relations.add(ex['relation'])
+            ## hr2t dict
             key = (ex['head_id'], ex['relation'])
             if key not in self.hr2tails:
                 self.hr2tails[key] = set()
@@ -81,15 +82,28 @@ class LinkGraph:
         logger.info('Start to build link graph from {}'.format(train_path))
         # id -> set(id)
         self.graph = {}
+        self.head2rt = {}
+        self.triple2idx = {} ## use to find index for hr_t paths
+        self.path_dict = defaultdict(lambda: defaultdict(set)) ## paths for h, t pairs
         examples = json.load(open(train_path, 'r', encoding='utf-8'))
-        for ex in examples:
+        ## add by mhd
+        examples += [reverse_triplet(obj) for obj in examples]
+        for i, ex in enumerate(examples):
             head_id, tail_id = ex['head_id'], ex['tail_id']
             if head_id not in self.graph:
                 self.graph[head_id] = set()
             self.graph[head_id].add(tail_id)
-            if tail_id not in self.graph:
-                self.graph[tail_id] = set()
-            self.graph[tail_id].add(head_id)
+            ## needed if reverse_triplet is not used
+            # if tail_id not in self.graph:
+            #     self.graph[tail_id] = set()
+            # self.graph[tail_id].add(head_id)
+            ## h2rt dict
+            key = ex['head_id']
+            val = (ex['relation'], ex['tail_id'])
+            if key not in self.head2rt:
+                self.head2rt[key] = set()
+            self.head2rt[key].add(val)
+            self.triple2idx[(ex['head_id'], ex['relation'], ex['tail_id'])] = i
         logger.info('Done build link graph with {} nodes'.format(len(self.graph)))
 
     def get_neighbor_ids(self, entity_id: str, max_to_keep=10) -> List[str]:
@@ -119,6 +133,41 @@ class LinkGraph:
                         if len(seen_eids) > max_nodes:
                             return set()
         return set([entity_dict.entity_to_idx(e_id) for e_id in seen_eids])
+
+
+    ## generate paths with reliability (probability)
+    ## put everything needed in graph (h2rt, example-idx)
+    ## each path comes with the confidence
+    def get_n_hop_path_indices(self, entity_id: str,
+                                 n_hop: int = 2,
+                                 # return empty if exceeds this number
+                                 max_nodes: int = 100000) -> set:
+        if n_hop < 0:
+            return set()
+
+        seen_eids = set()
+        seen_eids.add(entity_id)
+        ## path saved as (trip_idx0+trip_idx1+....+trip_idxn) 
+        queue = deque([('', entity_id, 1.0)])
+        for i in range(n_hop):
+            len_q = len(queue)
+            for _ in range(len_q):
+                cur_path, tc, conf = queue.popleft()
+                if tc in self.head2rt:
+                    new_conf = conf / float(len(self.head2rt[tc]))
+                    ## check possible neighbors for this node (tc)
+                    for r, tn in self.head2rt[tc]:
+                        trip_idx = self.triple2idx[(tc, r, tn)]
+                        new_path = cur_path + '+' + str(trip_idx)
+
+                        # if node not in seen_eids:
+                        new_tuple = tuple([new_path, tn, new_conf])
+                        # print(new_tuple)
+                        self.path_dict[entity_id][tn].add((new_path, new_conf))
+                        queue.append(new_tuple)
+                        seen_eids.add(tn)
+                        if len(seen_eids) > max_nodes:
+                            return set()
 
 
 def reverse_triplet(obj):

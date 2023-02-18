@@ -13,6 +13,7 @@ from transformers import AdamW
 from doc import Dataset, collate
 from utils import AverageMeter, ProgressMeter
 from utils import save_checkpoint, delete_old_ckt, report_num_trainable_parameters, move_to_cuda, get_model_obj
+from dict_hub import get_entity_dict, get_all_triplet_dict
 from metric import accuracy
 from models import build_model, ModelOutput
 from dict_hub import build_tokenizer
@@ -76,7 +77,7 @@ class Trainer:
             self.train_epoch(epoch)
             self._run_eval(epoch=epoch)
 
-    @torch.no_grad()
+    @torch.no_grad() ## no gradient computation, same as with torch.no_grad()
     def _run_eval(self, epoch, step=0):
         metric_dict = self.eval_epoch(epoch)
         is_best = self.valid_loader and (self.best_metric is None or metric_dict['Acc@1'] > self.best_metric['Acc@1'])
